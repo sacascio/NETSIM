@@ -136,24 +136,10 @@ def get_outer_config(filename,vrf,outer_encap,basedir,bgpid,fw):
                     ip = ip.strip()
                 data.append(c.text)
     # BGP
-    """
-    for obj in parse.find_objects("router bgp " + str(bgpid)):
-        rtr_bgp =  obj.text
-        data.append(rtr_bgp)
-        if obj.hash_children != 0:
-            for c in obj.children:
-                c.text = c.text.strip()
-                if vrfmember == c.text:
-                    data.append(vrfmember)
-                    for bgpdata in c.children:
-                        data.append(bgpdata.text)
-                        if bgpdata.hash_children != 0:
-                            for subdata in bgpdata.children:
-                                data.append(subdata.text)
-                                if subdata.hash_children != 0:
-                                    for subdata2 in subdata.children:
-                                        data.append(subdata2.text)
-    """
+    bgp_details = parse.find_all_children("^router bgp")
+    for d in bgp_details:
+        data.append(d)
+
     # Trunk Link
     data.append("interface Ethernet2/10")
     data.append(" switchport")
@@ -163,29 +149,65 @@ def get_outer_config(filename,vrf,outer_encap,basedir,bgpid,fw):
 
     return (ip,data)
 
-def get_outer_details(filename,outer_encap):
-
-    return (ip)
-
-def create_outer_n7k_config(n7k_ips,outer_encap,fw,bgpid):
-    # Create SVI
-    # create BGP config - only if BGP config does not exist
-    # create static routes
-
-
-    return config
-
-def create_inner_n7k_config(n7k_ips,fw,vrf,bgpid):
-
-    # Create SVI
-    # create BGP config - only if BGP config does not exist
-    # create static routes
-    # Create VRF context
-
-    return config
-
 def push_to_n7k(n7k_ip,cfg):
+    content_type = "json"
+    HTTPS_SERVER_PORT = "8080"
+    requests.packages.urllib3.disable_warnings()
 
+    if commands.endswith(" ; "):
+        commands = commands[:-3]
+
+    payload = {
+        "ins_api": {
+            "version": "1.2",
+            "type": "cli_conf",
+            "chunk": "0",  # do not chunk results
+            "sid": "0",
+            "input": commands,
+            "output_format": "json"
+        }
+    }
+
+    headers = {'content-type': 'application/%s' % content_type}
+    response = requests.post("https://%s:%s/ins" % (ip, HTTPS_SERVER_PORT),
+                             auth=('admin', 'admin'),
+                             headers=headers,
+                             data=json.dumps(payload),
+                             verify=False,  # disable SSH certificate verification
+                             timeout=60)
+
+    if response.status_code == 200:
+        allcmds = commands.split(" ; ")
+        # verify result
+        data = response.json()
+        # print (json.dumps(data))
+        if isinstance(data['ins_api']['outputs']['output'], dict):
+            if int(data['ins_api']['outputs']['output']['code']) != 200:
+                data['ins_api']['outputs']['output']['msg'] = data['ins_api']['outputs']['output']['msg'].rstrip()
+                print("ERROR: %s, %s.  Command is: %s" % ('msg', data['ins_api']['outputs']['output']['msg'], commands))
+            else:
+                if 'body' in data['ins_api']['outputs']['output'] and len(
+                        data['ins_api']['outputs']['output']['body']) > 0:
+                    print(data['ins_api']['outputs']['output']['body'])
+        else:
+            for d in data['ins_api']['outputs']['output']:
+                for k in d.keys():
+                    if int(d['code']) != 200:
+                        cmd_number = data['ins_api']['outputs']['output'].index(d)
+                        if k != 'code':
+                            if not isinstance(d[k], dict):
+                                d[k] = d[k].rstrip()
+                                print("ERROR: %s, %s.  Command is: %s" % (k, d[k], allcmds[cmd_number]))
+                if 'body' in d and len(d['body']) > 0:
+                    print(d['body'])
+
+    else:
+        msg = "call to %s failed, status code %d (%s).  Command is %s." % (ip,
+                                                                           response.status_code,
+                                                                           response.content.decode("utf-8"),
+                                                                           commands
+                                                                           )
+        print(msg)
 
     return
 
@@ -323,8 +345,13 @@ def main(argv):
         n7kfile = n7k_files['outer'][vdcnum]
         outer_config = add_static_routes(vdcnum,inner_svi_ips,vrf,outer_config,'outer')
 
-    print (json.dumps(inner_config))
-    print (json.dumps(outer_config))
+    #Push to N7K
+    for i in n7k_ips['inner']:
+        ip = n7k_ips['inner'][i]
+        i_config =  inner_config[vrf][str(i)]['config']
+        push_to_n7k(ip,i_config)
+    #print (json.dumps(inner_config))
+    #print (json.dumps(outer_config))
 
 
 if __name__ == '__main__':
