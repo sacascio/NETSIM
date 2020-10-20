@@ -5,6 +5,38 @@ from ciscoconfparse import CiscoConfParse
 import re
 from netaddr import *
 import requests
+import os
+
+def get_initial_configs():
+    i_cfg = {}
+    d = []
+
+
+    d.append("feature interface-vlan")
+    d.append("feature bgp")
+    d.append("feature ospf")
+    d.append("feature bfd")
+    d.append("int e2/1-48")
+    d.append("switchport")
+    d.append("exit")
+    d.append("no router bgp 1")
+    d.append("int e2/3")
+    d.append("no switchport")
+    d.append("mtu 9192")
+    d.append("int e2/4")
+    d.append("no switchport")
+    d.append("mtu 9192")
+    d.append("int e2/5")
+    d.append("no switchport")
+    d.append("mtu 9192")
+    d.append("int e2/6")
+    d.append("no switchport")
+    d.append("mtu 9192")
+
+    i_cfg['config'] = []
+    i_cfg['config'].append(d)
+
+    return i_cfg
 
 def get_inner_to_outer_encap():
 
@@ -23,8 +55,8 @@ def get_inner_to_outer_encap():
         data[i] = 144
 
     # Res
-    for i in 45,46:
-        data[i] = 147
+    data[45] = 147
+    data[46] = 148
 
     return data
 
@@ -41,9 +73,9 @@ def get_vrf_to_encap_fw(dc):
     vrf.append(['CTL-PA1-' + dc.upper() + '-GIS',27])
     vrf.append(['CTL-PA2-' + dc.upper() + '-GIS',28])
     vrf.append(['CTL-PTM-' + dc.upper() + '-GIS',29])
-    vrf.append(['CTL-PTM-DMZ' + dc.upper() + '-GIS',30])
-    vrf.append(['RES-DST' + dc.upper() + '-GIS',45])
-    vrf.append(['RES-MMP' + dc.upper() + '-GIS',46])
+    vrf.append(['CTL-PTM-DMZ-' + dc.upper() + '-GIS',30])
+    vrf.append(['RES-DST-' + dc.upper() + '-GIS',45])
+    vrf.append(['RES-MMP-' + dc.upper() + '-GIS',46])
 
     for i in vrf:
         vrfname = i[0]
@@ -61,12 +93,13 @@ def get_vrf_to_encap_fw(dc):
 
 def load_rd():
 
+    rd = {}
+    rd['CTL'] = '3:3'
+    rd['UAC'] = '4:4'
+    rd['SVC'] = '1:1'
+    rd['RES'] = '2:2'
+
     return rd
-
-def load_fw_ips():
-
-    return fw_ips
-
 
 def usage():
     print ("Usage: " + sys.argv[ 0] + " -d|--dc <dc1 or dc2> -v <VRF as defined on N7K -f FW name")
@@ -76,6 +109,12 @@ def get_inner_config(filename,vrf,inner_encap,basedir,bgpid,fw):
     data = []
     vrfmember = 'vrf ' + vrf
     parse = CiscoConfParse(basedir + filename)
+
+    # Create L2 VLAN
+    data.append("vlan " + str(inner_encap))
+
+    # Create VRF
+    data.append("vrf context " + vrf)
 
     # SVI
     for obj in parse.find_objects("interface Vlan" + str(inner_encap)):
@@ -107,22 +146,28 @@ def get_inner_config(filename,vrf,inner_encap,basedir,bgpid,fw):
                                     for subdata2 in subdata.children:
                                         data.append(subdata2.text)
 
+
+
     # Trunk Link
-    data.append("interface Ethernet2/10")
+    if bool(re.search('RES-MMP',vrf)):
+        data.append("interface Ethernet2/9")
+    else:
+        data.append("interface Ethernet2/10")
     data.append(" description to " + fw)
     data.append(" switchport")
     data.append(" switchport mode trunk")
     data.append(" switchport trunk allowed vlan add " + str(inner_encap))
     data.append(" no shutdown")
 
-    # Create L2 VLAN
-    data.append("vlan " + str(inner_encap))
-    return (ip,data)
+    return (ip, data)
 
 def get_outer_config(filename,vrf,outer_encap,basedir,bgpid,fw):
     data = []
     vrfmember = 'vrf ' + vrf
     parse = CiscoConfParse(basedir + filename)
+
+    # Create L2 VLAN
+    data.append("vlan " + str(outer_encap))
 
     # SVI
     for obj in parse.find_objects("interface Vlan" + str(outer_encap)):
@@ -142,7 +187,10 @@ def get_outer_config(filename,vrf,outer_encap,basedir,bgpid,fw):
         data.append(d)
 
     # Trunk Link
-    data.append("interface Ethernet2/10")
+    if bool(re.search('RES-MMP',vrf)):
+        data.append("interface Ethernet2/9")
+    else:
+        data.append("interface Ethernet2/10")
     data.append(" switchport")
     data.append(" switchport mode trunk")
     data.append(" switchport trunk allowed vlan add " + str(outer_encap))
@@ -154,9 +202,9 @@ def push_to_n7k(ip,commands):
     content_type = "json"
     HTTPS_SERVER_PORT = "8080"
     to_delete = []
-    commands[0].append("! SAL")
+
     for element, c in enumerate(commands[0]):
-        if c == '' or bool(re.search('!', c)):
+        if c == '' or bool(re.search('!', c)) or bool(re.search('advertise l2vpn evpn', c)):
             to_delete.append(c)
         else:
             c = c.lstrip()
@@ -191,7 +239,7 @@ def push_to_n7k(ip,commands):
                              timeout=60)
 
     if response.status_code == 200:
-        allcmds = commands.split(" ; ")
+        allcmds = commands[0].split(" ; ")
         # verify result
         data = response.json()
         # print (json.dumps(data))
@@ -225,9 +273,45 @@ def push_to_n7k(ip,commands):
 
     return
 
-def print_fw_config(fwinner,fwouter):
+def print_outer_fw_config(svis,encap,rd,fw,vrf):
 
-    return config
+    fwfile = fw + ".log"
+    print ("Paste the following configs to FW %s from file %s" % (fw,fwfile))
+    f = open(fwfile,"a")
+    f.write("ip vrf " + vrf[:3] + '\n')
+    f.write(" rd " + rd + '\n')
+    for i in [ 1,2,3,4]:
+        cfg_svi_ip_less_1 = IPAddress(svis[i-1])
+        cfg_svi_ip_less_1 = cfg_svi_ip_less_1 - 1
+        f.write("interface GigabitEthernet0/" + str(i) + '\n')
+        f.write(" no ip add\n")
+        f.write("interface GigabitEthernet0/" + str(i) + "." + str(encap) + '\n')
+        f.write("encapsulation dot1Q " + str(encap) + '\n')
+        f.write("ip vrf forwarding " + vrf[:3] + '\n')
+        f.write("ip address " + str(cfg_svi_ip_less_1) + " 255.255.255.252\n")
+        f.write("no shut\n")
+    f.close()
+    return
+
+def print_inner_fw_config(svis,encap,fw,vrf):
+
+    fwfile = fw + ".log"
+
+    f = open(fwfile,"a")
+    for i in [ 5,6,7,8]:
+        cfg_svi_ip_plus_1 = IPAddress(svis[i-5])
+        cfg_svi_ip_plus_1 = cfg_svi_ip_plus_1 + 1
+        f.write("interface GigabitEthernet0/" + str(i) + '\n')
+        f.write(" no ip add\n")
+        f.write("interface GigabitEthernet0/" + str(i) + "." + str(encap) + '\n')
+        f.write("encapsulation dot1Q " + str(encap) + '\n')
+        f.write("ip vrf forwarding " + vrf[:3] + '\n')
+        f.write("ip address " + str(cfg_svi_ip_plus_1) + " 255.255.255.252\n")
+        f.write("no shut\n")
+    f.close()
+    return
+
+
 
 def add_static_routes(vdcnum,svi_ips,vrf,config,location):
     # inner_config = add_static_routes(vdcnum,outer_svi_ips,vrf,inner_config,'inner')
@@ -253,6 +337,8 @@ def add_static_routes(vdcnum,svi_ips,vrf,config,location):
     return config
 
 def main(argv):
+
+
     basedir = "/Users/scascio/GitHub/ACI/SG_PBR/"
     try:
         opts, args = getopt.getopt(argv, "d:v:h", ["dc=","vrf=", "help"])
@@ -291,15 +377,15 @@ def main(argv):
 
 
     if dc.upper() == 'DC2':
-        n7k_ips['inner'][1] = '172.21.41.107'
-        n7k_ips['inner'][2] = '172.21.41.108'
-        n7k_ips['inner'][3] ='172.21.41.109'
-        n7k_ips['inner'][4] ='172.21.41.110'
+        n7k_ips['inner'][1] = '172.24.21.205'
+        n7k_ips['inner'][2] = '172.24.21.206'
+        n7k_ips['inner'][3] = '172.24.21.207'
+        n7k_ips['inner'][4] = '172.24.21.208'
 
-        n7k_ips['outer'][1] = '172.21.41.111'
-        n7k_ips['outer'][2] = '172.21.41.112'
-        n7k_ips['outer'][3] = '172.21.41.113'
-        n7k_ips['outer'][4] ='172.21.41.114'
+        n7k_ips['outer'][1] = '172.24.21.209'
+        n7k_ips['outer'][2] = '172.24.21.210'
+        n7k_ips['outer'][3] = '172.24.21.211'
+        n7k_ips['outer'][4] = '172.24.21.212'
         n7k_bgp_id_inner = 65512
         n7k_bgp_id_outer = 65510
         vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc2')
@@ -313,6 +399,8 @@ def main(argv):
     for x in (1,2,3,4):
         n7k_files['inner'][x] = dc.lower() +  'dcinxc' + str(x) + 'gisinner.log'
         n7k_files['outer'][x] = dc.lower() +  'dcinxc' + str(x) + 'dciouter.log'
+
+    init_cfgs = get_initial_configs()
 
     # Build Inner
     # Inner config so far has:
@@ -359,14 +447,36 @@ def main(argv):
         n7kfile = n7k_files['outer'][vdcnum]
         outer_config = add_static_routes(vdcnum,inner_svi_ips,vrf,outer_config,'outer')
 
-    #Push to N7K
-    for i in n7k_ips['inner']:
-        ip = n7k_ips['inner'][i]
-        i_config =  inner_config[vrf][str(i)]['config']
-        push_to_n7k(ip,i_config)
-    #print (json.dumps(inner_config))
-    #print (json.dumps(outer_config))
+    # Push init cfgs - outer
+    #print ("PUSHING INIT CFGS TO OUTER %s" % vrf)
+    #for n in n7k_ips['outer']:
+    #    ip = n7k_ips['outer'][n]
+    #    push_to_n7k(ip,init_cfgs['config'])
 
+    # Push init cfgs - inner
+    #print ("PUSHING INIT CFGS TO INNER %s " % vrf)
+    #for n in n7k_ips['inner']:
+    #    ip = n7k_ips['inner'][n]
+    #    push_to_n7k(ip,init_cfgs['config'])
+
+    #Push to N7K - outer
+    for n in n7k_ips['outer']:
+        ip = n7k_ips['outer'][n]
+        c_config =  outer_config[vrf][str(n)]['config']
+        print ("PUSHING TO OUTER " + str(n) + ", VRF " + vrf)
+        push_to_n7k(ip,c_config)
+
+    # Push to N7K - inner
+    for n in n7k_ips['inner']:
+        ip = n7k_ips['inner'][n]
+        c_config = inner_config[vrf][str(n)]['config']
+        print ("PUSHING TO INNER " + str(n) + ", VRF " + vrf)
+        push_to_n7k(ip, c_config)
+
+    rd = load_rd()
+
+    print_outer_fw_config(outer_svi_ips,outer_encap,rd[vrf[:3]],fw,vrf)
+    print_inner_fw_config(inner_svi_ips,inner_encap,fw,vrf)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
