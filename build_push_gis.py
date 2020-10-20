@@ -390,8 +390,15 @@ def main(argv):
         n7k_bgp_id_outer = 65510
         vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc2')
     else:
-        print ("NO IPs defined for DC1 - exiting")
-        sys.exit(9)
+        n7k_ips['inner'][1] = '172.24.47.172'
+        n7k_ips['inner'][2] = '172.24.47.173'
+        n7k_ips['inner'][3] = '172.24.47.184'
+        n7k_ips['inner'][4] = '172.24.47.194'
+
+        n7k_ips['outer'][1] = '172.24.47.195'
+        n7k_ips['outer'][2] = '172.24.47.189'
+        n7k_ips['outer'][3] = '172.24.47.187'
+        n7k_ips['outer'][4] = '172.24.47.188'
         n7k_bgp_id_inner = 65502
         n7k_bgp_id_outer = 65500
         vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc1')
