@@ -375,7 +375,7 @@ def main(argv):
 
     inner_to_outer_encap = get_inner_to_outer_encap()
 
-
+    '''
     if dc.upper() == 'DC2':
         n7k_ips['inner'][1] = '172.24.21.205'
         n7k_ips['inner'][2] = '172.24.21.206'
@@ -389,6 +389,23 @@ def main(argv):
         n7k_bgp_id_inner = 65512
         n7k_bgp_id_outer = 65510
         vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc2')
+    '''
+
+    if dc.upper() == 'DC2':
+        n7k_ips['inner'][1] = '192.168.1.235'
+        n7k_ips['inner'][2] = '192.168.1.236'
+        n7k_ips['inner'][3] = '192.168.1.237'
+        n7k_ips['inner'][4] = '192.168.1.238'
+
+        n7k_ips['outer'][1] = '192.168.1.239'
+        n7k_ips['outer'][2] = '192.168.1.240'
+        n7k_ips['outer'][3] = '192.168.1.241'
+        n7k_ips['outer'][4] = '192.168.1.242'
+        n7k_bgp_id_inner = 65512
+        n7k_bgp_id_outer = 65510
+        vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc2')
+
+
     else:
         n7k_ips['inner'][1] = '172.24.47.172'
         n7k_ips['inner'][2] = '172.24.47.173'
