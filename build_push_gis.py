@@ -67,7 +67,7 @@ def get_vrf_to_encap_fw(dc):
     vrf.append(['SVC-COM-' + dc.upper() + '-GIS',11])
     vrf.append(['SVC-ITC-' + dc.upper() + '-GIS',12])
     vrf.append(['SVC-BSC-' + dc.upper() + '-GIS',13])
-    vrf.append(['SVC-TFR-' + dc.upper() + '-GIS',14])
+    vrf.append(['SVC-TRF-' + dc.upper() + '-GIS',14])
     vrf.append(['UAC-ENT-' + dc.upper() + '-GIS',17])
     vrf.append(['UAC-HRZ-' + dc.upper() + '-GIS',18])
     vrf.append(['CTL-PA1-' + dc.upper() + '-GIS',27])
@@ -406,16 +406,31 @@ def main(argv):
         vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc2')
 
 
-    else:
-        n7k_ips['inner'][1] = '172.24.47.172'
-        n7k_ips['inner'][2] = '172.24.47.173'
-        n7k_ips['inner'][3] = '172.24.47.184'
-        n7k_ips['inner'][4] = '172.24.47.194'
+   # else:
+   #     n7k_ips['inner'][1] = '172.24.47.172'
+   #     n7k_ips['inner'][2] = '172.24.47.173'
+   #     n7k_ips['inner'][3] = '172.24.47.184'
+   #     n7k_ips['inner'][4] = '172.24.47.194'
 
-        n7k_ips['outer'][1] = '172.24.47.195'
-        n7k_ips['outer'][2] = '172.24.47.189'
-        n7k_ips['outer'][3] = '172.24.47.187'
-        n7k_ips['outer'][4] = '172.24.47.188'
+   #     n7k_ips['outer'][1] = '172.24.47.195'
+   #     n7k_ips['outer'][2] = '172.24.47.189'
+   #     n7k_ips['outer'][3] = '172.24.47.187'
+   #     n7k_ips['outer'][4] = '172.24.47.188'
+   #     n7k_bgp_id_inner = 65502
+   #     n7k_bgp_id_outer = 65500
+   #     vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc1')
+
+
+    else:
+        n7k_ips['inner'][1] = '192.168.1.235'
+        n7k_ips['inner'][2] = '192.168.1.236'
+        n7k_ips['inner'][3] = '192.168.1.237'
+        n7k_ips['inner'][4] = '192.168.1.238'
+
+        n7k_ips['outer'][1] = '192.168.1.239'
+        n7k_ips['outer'][2] = '192.168.1.240'
+        n7k_ips['outer'][3] = '192.168.1.241'
+        n7k_ips['outer'][4] = '192.168.1.242'
         n7k_bgp_id_inner = 65502
         n7k_bgp_id_outer = 65500
         vrf_to_encap_to_fw = get_vrf_to_encap_fw('dc1')
