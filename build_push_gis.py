@@ -11,7 +11,7 @@ def get_initial_configs():
     i_cfg = {}
     d = []
 
-
+    d.append("license grace-period")
     d.append("feature interface-vlan")
     d.append("feature bgp")
     d.append("feature ospf")
@@ -232,7 +232,7 @@ def push_to_n7k(ip,commands):
 
     headers = {'content-type': 'application/%s' % content_type}
     response = requests.post("https://%s:%s/ins" % (ip, HTTPS_SERVER_PORT),
-                             auth=('admin', 'admin'),
+                             auth=('admin', 'cisco123'),
                              headers=headers,
                              data=json.dumps(payload),
                              verify=False,  # disable SSH certificate verification
